@@ -1,4 +1,5 @@
-import initJolt from 'jolt-physics';
+// app.js — исправленная версия для Vercel
+import initJolt from 'https://www.unpkg.com/jolt-physics@1.2.0/dist/jolt-physics.wasm-compat.js';
 
 // ========== DOM элементы ==========
 const elements = {
@@ -33,12 +34,29 @@ function setProgress(value, stageText, detailText) {
     if (detailText) elements.detail.textContent = detailText;
 }
 
+// Симуляция прогресса (пока загружается Jolt)
+let progressInterval;
+function startProgressSimulation() {
+    let p = 0;
+    progressInterval = setInterval(() => {
+        if (p < 40) {
+            p += 2;
+            setProgress(p, 'Загрузка движка', 'Подключение JoltPhysics.js');
+        }
+    }, 100);
+}
+
+function stopProgressSimulation() {
+    if (progressInterval) clearInterval(progressInterval);
+}
+
 // ========== Глобальные переменные ==========
 let Jolt, physicsSystem, bodyInterface, scene, camera, renderer, orbitControls;
 let softBody, clothMesh;
 let dynamicBodies = [];
 let markers = null;
 let animationId = null;
+let isInitialized = false;
 
 // Константы
 const LAYER_MOVING = 1;
@@ -47,7 +65,7 @@ const COLORS = [0xff6b6b, 0x4ecdc4, 0x45b7d1, 0x96ceb4, 0xffcc5c, 0xff6f69, 0x9b
 
 // ========== Инициализация Three.js ==========
 function initThree() {
-    setProgress(50, '3D сцена', 'Настройка визуализации');
+    setProgress(45, '3D сцена', 'Настройка визуализации');
     
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0x0a0a2a);
@@ -185,6 +203,8 @@ function createSoftBody() {
     clothMesh.castShadow = true;
     clothMesh.receiveShadow = true;
     scene.add(clothMesh);
+    
+    setProgress(85, 'Настройка', 'Подготовка интерфейса');
 }
 
 // ========== Управление объектами ==========
@@ -289,6 +309,7 @@ function pushAllObjects() {
 }
 
 function resetCloth() {
+    if (!softBody) return;
     bodyInterface.SetPosition(softBody, new Jolt.RVec3(0, 12, 0), Jolt.EActivation_Activate);
     bodyInterface.SetLinearVelocity(softBody, new Jolt.Vec3(0, 0, 0), Jolt.EActivation_Activate);
 }
@@ -300,7 +321,7 @@ function updateStats() {
 
 // ========== Анимация и рендеринг ==========
 function updateMarkers() {
-    if (!elements.showParticles.checked) {
+    if (!elements.showParticles.checked || !softBody) {
         if (markers) {
             scene.remove(markers);
             markers = null;
@@ -340,7 +361,7 @@ function updateMarkers() {
 function animate() {
     animationId = requestAnimationFrame(animate);
     
-    if (physicsSystem) {
+    if (physicsSystem && isInitialized) {
         physicsSystem.Update(1 / 60, 1, 1, null, null);
     }
     
@@ -354,18 +375,18 @@ function animate() {
         }
     });
     
-    // Обновление ткани (простая визуализация позиции)
+    // Обновление ткани
     if (clothMesh && softBody) {
         const pos = softBody.GetPosition();
         clothMesh.position.set(pos.GetX(), pos.GetY(), pos.GetZ());
     }
     
     updateMarkers();
-    orbitControls.update();
-    renderer.render(scene, camera);
+    if (orbitControls) orbitControls.update();
+    if (renderer && scene && camera) renderer.render(scene, camera);
 }
 
-// ========== Перетаскивание полотна (мышь + тач) ==========
+// ========== Перетаскивание полотна ==========
 function setupDragging() {
     let isDragging = false;
     let dragStartPos = null;
@@ -374,6 +395,7 @@ function setupDragging() {
     const mouse = new THREE.Vector2();
     
     function getWorldPos(clientX, clientY, planeY = 12) {
+        if (!renderer || !camera) return null;
         mouse.x = (clientX / renderer.domElement.clientWidth) * 2 - 1;
         mouse.y = -(clientY / renderer.domElement.clientHeight) * 2 + 1;
         raycaster.setFromCamera(mouse, camera);
@@ -384,6 +406,7 @@ function setupDragging() {
     }
     
     function onStart(clientX, clientY) {
+        if (!softBody) return;
         const worldPos = getWorldPos(clientX, clientY, 12);
         if (worldPos && Math.abs(worldPos.y - 12) < 3) {
             isDragging = true;
@@ -393,7 +416,7 @@ function setupDragging() {
     }
     
     function onMove(clientX, clientY) {
-        if (!isDragging) return;
+        if (!isDragging || !softBody) return;
         const worldPos = getWorldPos(clientX, clientY, 12);
         if (worldPos && dragStartPos) {
             const deltaX = worldPos.x - dragStartPos.x;
@@ -411,12 +434,12 @@ function setupDragging() {
         isDragging = false;
     }
     
-    // Мышь
+    if (!renderer || !renderer.domElement) return;
+    
     renderer.domElement.addEventListener('mousedown', (e) => { if (e.button === 0) onStart(e.clientX, e.clientY); });
     window.addEventListener('mousemove', (e) => onMove(e.clientX, e.clientY));
     window.addEventListener('mouseup', onEnd);
     
-    // Тач
     renderer.domElement.addEventListener('touchstart', (e) => {
         e.preventDefault();
         const touch = e.touches[0];
@@ -432,15 +455,19 @@ function setupDragging() {
 
 // ========== Настройка обработчиков UI ==========
 function setupUI() {
-    elements.gravityToggle.addEventListener('change', (e) => {
-        physicsSystem.SetGravity(e.target.checked ? new Jolt.Vec3(0, -9.81, 0) : new Jolt.Vec3(0, 0, 0));
-    });
+    if (elements.gravityToggle) {
+        elements.gravityToggle.addEventListener('change', (e) => {
+            if (physicsSystem) {
+                physicsSystem.SetGravity(e.target.checked ? new Jolt.Vec3(0, -9.81, 0) : new Jolt.Vec3(0, 0, 0));
+            }
+        });
+    }
     
-    elements.randomBtn.addEventListener('click', () => addRandomObjects(10));
-    elements.pushBtn.addEventListener('click', pushAllObjects);
-    elements.clearBtn.addEventListener('click', clearAllObjects);
-    elements.resetBtn.addEventListener('click', resetCloth);
-    elements.manyBtn.addEventListener('click', addManyObjects);
+    if (elements.randomBtn) elements.randomBtn.addEventListener('click', () => addRandomObjects(10));
+    if (elements.pushBtn) elements.pushBtn.addEventListener('click', pushAllObjects);
+    if (elements.clearBtn) elements.clearBtn.addEventListener('click', clearAllObjects);
+    if (elements.resetBtn) elements.resetBtn.addEventListener('click', resetCloth);
+    if (elements.manyBtn) elements.manyBtn.addEventListener('click', addManyObjects);
     
     document.querySelectorAll('[data-type]').forEach(btn => {
         btn.addEventListener('click', () => addObject(btn.dataset.type));
@@ -451,45 +478,74 @@ function setupUI() {
 function finishLoading() {
     setProgress(100, 'Готово!', 'Мир загружен');
     setTimeout(() => {
-        elements.loadingOverlay.style.opacity = '0';
-        setTimeout(() => {
-            elements.loadingOverlay.style.display = 'none';
-        }, 500);
-        elements.app.style.opacity = '1';
-        elements.controls.classList.add('visible');
-        elements.dragHint.style.opacity = '1';
+        if (elements.loadingOverlay) {
+            elements.loadingOverlay.style.opacity = '0';
+            setTimeout(() => {
+                if (elements.loadingOverlay) elements.loadingOverlay.style.display = 'none';
+            }, 500);
+        }
+        if (elements.app) elements.app.style.opacity = '1';
+        if (elements.controls) elements.controls.classList.add('visible');
+        if (elements.dragHint) elements.dragHint.style.opacity = '1';
+        isInitialized = true;
     }, 300);
 }
 
 // ========== Инициализация приложения ==========
 async function init() {
-    setProgress(5, 'Загрузка Jolt Physics', 'Подключение движка');
+    console.log('🚀 Запуск инициализации...');
+    startProgressSimulation();
     
-    // Загрузка Jolt
-    const JoltInstance = await initJolt();
-    setProgress(40, 'Инициализация', 'Настройка физики');
-    
-    initThree();
-    initPhysics(JoltInstance);
-    createSoftBody();
-    setupDragging();
-    setupUI();
-    
-    // Добавляем начальные объекты
-    setTimeout(() => {
-        for (let i = 0; i < 30; i++) {
-            setTimeout(() => addObject(), i * 50);
+    try {
+        setProgress(10, 'Загрузка Jolt Physics', 'Подключение движка');
+        
+        // Загрузка Jolt с таймаутом
+        const joltPromise = initJolt();
+        const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Таймаут загрузки Jolt')), 15000)
+        );
+        
+        const JoltInstance = await Promise.race([joltPromise, timeoutPromise]);
+        stopProgressSimulation();
+        
+        setProgress(40, 'Инициализация', 'Настройка физики');
+        
+        // Инициализация Three.js
+        initThree();
+        
+        setProgress(55, 'Физический движок', 'Создание мира');
+        initPhysics(JoltInstance);
+        
+        setProgress(70, 'Мягкое тело', 'Построение ткани');
+        createSoftBody();
+        
+        setProgress(85, 'Интерфейс', 'Настройка управления');
+        setupDragging();
+        setupUI();
+        
+        // Добавляем начальные объекты
+        setTimeout(() => {
+            for (let i = 0; i < 20; i++) {
+                setTimeout(() => addObject(), i * 80);
+            }
+        }, 500);
+        
+        // Запуск анимации
+        animate();
+        finishLoading();
+        
+        console.log('✅ Инициализация завершена успешно!');
+        
+    } catch (err) {
+        console.error('❌ Ошибка:', err);
+        stopProgressSimulation();
+        if (elements.detail) {
+            elements.detail.textContent = 'Ошибка: ' + err.message;
+            elements.detail.style.color = '#ff6b6b';
         }
-    }, 500);
-    
-    // Запуск анимации
-    animate();
-    finishLoading();
+        if (elements.stage) elements.stage.textContent = 'Ошибка загрузки';
+    }
 }
 
-// Запуск
-init().catch(err => {
-    console.error('Ошибка:', err);
-    elements.detail.textContent = 'Ошибка загрузки. Обновите страницу.';
-    elements.detail.style.color = '#ff6b6b';
-});
+// Запуск при полной загрузке страницы
+window.addEventListener('DOMContentLoaded', init);
