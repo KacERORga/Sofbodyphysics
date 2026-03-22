@@ -1,0 +1,255 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+}
+
+body {
+    font-family: 'Segoe UI', -apple-system, 'Roboto', sans-serif;
+    overflow: hidden;
+    background: #0a0a2a;
+}
+
+/* Загрузочный экран */
+#loading-overlay {
+    position: fixed;
+    inset: 0;
+    background: linear-gradient(135deg, #0a0a2a, #1a1a3a);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    transition: opacity 0.5s;
+}
+
+.loader-container {
+    text-align: center;
+    width: 280px;
+}
+
+.logo {
+    font-size: 24px;
+    font-weight: bold;
+    background: linear-gradient(135deg, #ff6b6b, #4ecdc4);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    margin-bottom: 30px;
+}
+
+.percent {
+    font-size: 32px;
+    font-weight: bold;
+    color: #ff6b6b;
+    font-family: monospace;
+    margin: 20px 0;
+}
+
+.progress-bar {
+    width: 100%;
+    height: 6px;
+    background: rgba(255,255,255,0.2);
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.progress-fill {
+    width: 0%;
+    height: 100%;
+    background: linear-gradient(90deg, #ff6b6b, #ff8e8e);
+    transition: width 0.2s;
+}
+
+.stage, .detail {
+    margin-top: 12px;
+    font-family: monospace;
+}
+
+.stage { color: #fff; font-size: 14px; }
+.detail { color: #888; font-size: 11px; }
+
+/* Основной интерфейс */
+#app {
+    opacity: 0;
+    transition: opacity 0.5s;
+}
+
+.info-panel {
+    position: fixed;
+    top: 12px;
+    left: 12px;
+    right: 12px;
+    background: rgba(0,0,0,0.85);
+    backdrop-filter: blur(10px);
+    padding: 10px 15px;
+    border-radius: 12px;
+    color: white;
+    font-size: 12px;
+    text-align: center;
+    z-index: 10;
+    border-left: 3px solid #ff6b6b;
+    pointer-events: none;
+}
+
+.drag-hint {
+    position: fixed;
+    bottom: 50%;
+    right: 12px;
+    background: rgba(0,0,0,0.6);
+    backdrop-filter: blur(5px);
+    padding: 8px 12px;
+    border-radius: 30px;
+    font-size: 11px;
+    z-index: 15;
+    opacity: 0;
+    transition: opacity 0.5s;
+    pointer-events: none;
+}
+
+/* Панель управления */
+.controls-panel {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: rgba(0,0,0,0.92);
+    backdrop-filter: blur(15px);
+    padding: 12px;
+    border-radius: 20px 20px 0 0;
+    z-index: 20;
+    max-height: 45vh;
+    overflow-y: auto;
+    transform: translateY(100%);
+    transition: transform 0.3s;
+}
+
+.controls-panel.visible {
+    transform: translateY(0);
+}
+
+.section {
+    margin-bottom: 14px;
+}
+
+.title {
+    font-size: 11px;
+    color: #ff6b6b;
+    margin-bottom: 8px;
+    letter-spacing: 1px;
+}
+
+.object-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+}
+
+.object-grid button, .action-grid button {
+    background: rgba(255,255,255,0.15);
+    border: 1px solid rgba(255,255,255,0.2);
+    padding: 10px;
+    border-radius: 12px;
+    color: white;
+    font-weight: bold;
+    font-size: 12px;
+    cursor: pointer;
+    transition: transform 0.1s;
+}
+
+.object-grid button:active, .action-grid button:active {
+    transform: scale(0.96);
+}
+
+.object-grid button[data-type="sphere"] { background: linear-gradient(135deg, #ff6b6b, #ee5a5a); }
+.object-grid button[data-type="box"] { background: linear-gradient(135deg, #4ecdc4, #45b7d1); }
+.object-grid button[data-type="capsule"] { background: linear-gradient(135deg, #96ceb4, #88d8b0); }
+.object-grid button[data-type="cylinder"] { background: linear-gradient(135deg, #ffcc5c, #ffb347); }
+.object-grid button[data-type="cone"] { background: linear-gradient(135deg, #ff9a9e, #fecfef); }
+.object-grid button[data-type="torus"] { background: linear-gradient(135deg, #a8edea, #fed6e3); }
+
+.action-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.action-grid button.danger {
+    background: rgba(255,107,107,0.3);
+    border-color: #ff6b6b;
+}
+
+.slider-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.slider-item label {
+    flex: 1;
+    font-size: 11px;
+}
+
+input[type="range"] {
+    flex: 2;
+    height: 4px;
+    -webkit-appearance: none;
+    background: rgba(255,255,255,0.2);
+    border-radius: 5px;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #ff6b6b;
+    cursor: pointer;
+}
+
+.checkbox-group {
+    display: flex;
+    gap: 16px;
+    margin-top: 8px;
+}
+
+.checkbox-group label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    cursor: pointer;
+}
+
+.stats {
+    background: rgba(0,0,0,0.5);
+    padding: 8px;
+    border-radius: 10px;
+    text-align: center;
+    font-size: 11px;
+    font-family: monospace;
+    margin-top: 10px;
+}
+
+/* Десктопная версия */
+@media (min-width: 768px) {
+    .controls-panel {
+        max-width: 320px;
+        left: 0;
+        right: auto;
+        border-radius: 0 20px 0 0;
+        transform: translateY(0);
+    }
+    
+    .drag-hint {
+        bottom: 20px;
+        right: 20px;
+    }
+    
+    .object-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
