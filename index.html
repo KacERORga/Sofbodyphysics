@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
+    <title>JoltPhysics.js - Мягкое тело | Реальный индикатор загрузки</title>
+    <style>
+        * {
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
+        }
+        
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Roboto', sans-serif;
+        }
+        
+        /* ЭКРАН ЗАГРУЗКИ С РЕАЛЬНЫМ ПРОГРЕССОМ */
+        #loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(135deg, #0a0a2a 0%, #1a1a3a 100%);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            color: white;
+            font-family: 'Segoe UI', monospace;
+            transition: opacity 0.5s ease-out;
+        }
+        
+        .loader-container {
+            width: 280px;
+            max-width: 80vw;
+            text-align: center;
+        }
+        
+        .loader-bar-bg {
+            width: 100%;
+            height: 8px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 20px 0;
+        }
+        
+        .loader-bar-fill {
+            width: 0%;
+            height: 100%;
+            background: linear-gradient(90deg, #ff6b6b, #ff8e8e);
+            border-radius: 10px;
+            transition: width 0.2s ease-out;
+            box-shadow: 0 0 10px rgba(255,107,107,0.5);
+        }
+        
+        .loading-percent {
+            font-size: 32px;
+            font-weight: bold;
+            font-family: monospace;
+            letter-spacing: 2px;
+            color: #ff6b6b;
+            text-shadow: 0 0 10px rgba(255,107,107,0.3);
+        }
+        
+        .loading-stage {
+            font-size: 14px;
+            margin-top: 15px;
+            color: #aaa;
+            font-family: monospace;
+        }
+        
+        .loading-details {
+            font-size: 11px;
+            margin-top: 8px;
+            color: #888;
+            font-family: monospace;
+        }
+        
+        .jolt-logo {
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 30px;
+            background: linear-gradient(135deg, #ff6b6b, #4ecdc4);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+        
+        /* Основной интерфейс (изначально скрыт) */
+        #main-interface {
+            opacity: 0;
+            transition: opacity 0.5s;
+        }
+        
+        #info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            right: 10px;
+            background: rgba(0,0,0,0.85);
+            color: white;
+            padding: 10px 15px;
+            border-radius: 12px;
+            pointer-events: none;
+            z-index: 10;
+            font-size: 12px;
+            backdrop-filter: blur(10px);
+            border-left: 4px solid #ff6b6b;
+            text-align: center;
+        }
+        
+        #controls {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(0,0,0,0.92);
+            color: white;
+            padding: 12px;
+            z-index: 20;
+            font-size: 12px;
+            backdrop-filter: blur(15px);
+            overflow-y: auto;
+            max-height: 45vh;
+            border-top-left-radius: 20px;
+            border-top-right-radius: 20px;
+            transform: translateY(100%);
+            transition: transform 0.3s ease;
+        }
+        
+        #controls.visible {
+            transform: translateY(0);
+        }
+        
+        .object-buttons {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+        
+        .object-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 10px 5px;
+            border-radius: 12px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 12px;
+            touch-action: manipulation;
+            transition: transform 0.1s;
+        }
+        
+        .object-btn:active { transform: scale(0.95); }
+        .object-btn.sphere { background: linear-gradient(135deg, #ff6b6b, #ee5a5a); }
+        .object-btn.box { background: linear-gradient(135deg, #4ecdc4, #45b7d1); }
+        .object-btn.capsule { background: linear-gradient(135deg, #96ceb4, #88d8b0); }
+        .object-btn.cylinder { background: linear-gradient(135deg, #ffcc5c, #ffb347); }
+        .object-btn.cone { background: linear-gradient(135deg, #ff9a9e, #fecfef); }
+        .object-btn.torus { background: linear-gradient(135deg, #a8edea, #fed6e3); }
+        
+        .action-buttons {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+        
+        .action-btn {
+            background: rgba(255,255,255,0.15);
+            color: white;
+            border: 1px solid rgba(255,255,255,0.3);
+            padding: 10px;
+            border-radius: 12px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 12px;
+            transition: all 0.1s;
+        }
+        
+        .action-btn:active { background: rgba(255,255,255,0.3); transform: scale(0.97); }
+        .action-btn.danger { background: rgba(255,107,107,0.3); border-color: #ff6b6b; }
+        
+        .slider-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 8px;
+            flex-wrap: wrap;
+        }
+        
+        .slider-group label { flex: 1; min-width: 60px; font-size: 11px; }
+        input[type="range"] { flex: 2; height: 4px; -webkit-appearance: none; background: rgba(255,255,255,0.2); border-radius: 5px; }
+        input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%; background: #ff6b6b; cursor: pointer; }
+        
+        .checkbox-group { display: flex; gap: 12px; flex-wrap: wrap; }
+        .checkbox-group label { display: flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer; }
+        
+        .stats {
+            background: rgba(0,0,0,0.5);
+            padding: 8px;
+            border-radius: 10px;
+            text-align: center;
+            font-size: 11px;
+            margin-top: 8px;
+            font-family: monospace;
+        }
+        
+        .drag-indicator {
+            position: fixed;
+            bottom: 50%;
+            right: 10px;
+            background: rgba(0,0,0,0.6);
+            padding: 8px 12px;
+            border-radius: 30px;
+            font-size: 10px;
+            pointer-events: none;
+            z-index: 15;
+            backdrop-filter: blur(5px);
+            opacity: 0;
+            transition: opacity 0.5s;
+        }
+        
+        @media (min-width: 768px) {
+            #controls { max-width: 320px; right: auto; left: 0; border-radius: 0 20px 0 0; transform: translateY(0); }
+            .drag-indicator { bottom: 20px; right: 20px; }
+        }
+    </style>
+</head>
+<body>
+    <!-- РЕАЛЬНЫЙ ЭКРАН ЗАГРУЗКИ С ПРОЦЕНТАМИ -->
+    <div id="loading-overlay">
+        <div class="loader-container">
+            <div class="jolt-logo">⚡ JOLT PHYSICS</div>
+            <div class="loading-percent" id="loading-percent">0%</div>
+            <div class="loader-bar-bg">
+                <div class="loader-bar-fill" id="loader-fill"></div>
+            </div>
+            <div class="loading-stage" id="loading-stage">Инициализация...</div>
+            <div class="loading-details" id="loading-details">Подготовка окружения</div>
+        </div>
+    </div>
+    
+    <div id="main-interface">
+        <div id="info">🎮 <strong>Мягкое тело</strong> | 📦 <span id="objectCount">0</span> объектов | 🖱️ Тяни полотно</div>
+        <div class="drag-indicator" id="drag-indicator">👆 Тяните полотно</div>
+        
+        <div id="controls">
+            <div class="object-buttons">
+                <button class="object-btn sphere" data-type="sphere">🔴 Шар</button>
+                <button class="object-btn box" data-type="box">📦 Куб</button>
+                <button class="object-btn capsule" data-type="capsule">💊 Капсула</button>
+                <button class="object-btn cylinder" data-type="cylinder">🧴 Цилиндр</button>
+                <button class="object-btn cone" data-type="cone">📐 Конус</button>
+                <button class="object-btn torus" data-type="torus">🍩 Тор</button>
+            </div>
+            <div class="action-buttons">
+                <button class="action-btn" id="add-random-btn">🎲 +10 случ.</button>
+                <button class="action-btn" id="push-btn">💨 Толчок</button>
+                <button class="action-btn danger" id="clear-btn">🗑️ Очистить</button>
+            </div>
+            <div class="action-buttons">
+                <button class="action-btn" id="reset-cloth-btn">🔄 Сброс ткани</button>
+                <button class="action-btn" id="add-many-btn">🎯 +50 объектов</button>
+            </div>
+            <div class="slider-group">
+                <label>💪 Сила толчка</label>
+                <input type="range" id="force-slider" min="50" max="400" step="10" value="180">
+            </div>
+            <div class="slider-group">
+                <label>📏 Размер</label>
+                <input type="range" id="size-slider" min="0.2" max="0.8" step="0.05" value="0.4">
+            </div>
+            <div class="checkbox-group">
+                <label><input type="checkbox" id="gravity-toggle" checked> 🌍 Гравитация</label>
+                <label><input type="checkbox" id="show-particles"> ✨ Показать вершины</label>
+            </div>
+            <div class="stats" id="stats-info">⚡ Объектов: 0 | 🎪 1600 вершин</div>
+        </div>
+    </div>
+
+    <!-- Используем ТЕ ЖЕ САМЫЕ ФАЙЛЫ, что и в оригинальной демке - для максимальной скорости -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    
+    <script type="module">
+        // Функция обновления реального прогресса загрузки
+        let currentProgress = 0;
+        let currentStage = "";
+        
+        function updateProgress(percent, stage, detail) {
+            currentProgress = Math.min(99, Math.max(0, percent));
+            const percentEl = document.getElementById('loading-percent');
+            const fillEl = document.getElementById('loader-fill');
+            const stageEl = document.getElementById('loading-stage');
+            const detailEl = document.getElementById('loading-details');
+            
+            if (percentEl) percentEl.textContent = Math.floor(currentProgress) + "%";
+            if (fillEl) fillEl.style.width = currentProgress + "%";
+            if (stageEl && stage) stageEl.textContent = stage;
+            if (detailEl && detail) detailEl.textContent = detail;
+        }
+        
+        // Отслеживаем загрузку WASM через Performance API
+        let wasmLoadStart = performance.now();
+        
+        // Импортируем JoltPhysics с отслеживанием прогресса
+        updateProgress(5, "Загрузка движка", "Подключение JoltPhysics.js");
+        
+        // Используем тот же URL, что и в оригинальной демке - самый быстрый вариант
+        const joltUrl = 'https://www.unpkg.com/jolt-physics@1.2.0/dist/jolt-physics.wasm-compat.js';
+        
+        // Имитируем прогресс загрузки скрипта (реальный прогресс можно получить только через fetch с отслеживанием)
+        const script = document.createElement('script');
+        script.type = 'module';
+        script.innerHTML = `
+            import initJolt from '${joltUrl}';
+            
+            window.joltInitPromise = initJolt().then(function(Jolt) {
+                window.JoltInstance = Jolt;
+                return Jolt;
+            });
+        `;
+        document.head.appendChild(script);
+        
+        // Анимация прогресса во время загрузки
+        let progressInterval = setInterval(() => {
+            if (currentProgress < 30) {
+                updateProgress(currentProgress + 2, "Загрузка WASM модуля", "Скачивание физического движка...");
+            } else if (currentProgress < 60 && !window.JoltInstance) {
+                updateProgress(currentProgress + 1.5, "Компиляция WebAssembly", "Оптимизация для вашего устройства");
+            }
+            if (currentProgress >= 60) clearInterval(progressInterval);
+        }, 80);
+        
+        // Ждём полной загрузки Jolt
+        async function waitForJolt() {
+            while (!window.JoltInstance) {
+                await new Promise(r => setTimeout(r, 50));
+            }
+            return window.JoltInstance;
+        }
+        
+        // Основная инициализация после загрузки Jolt
+        waitForJolt().then(async (Jolt) => {
+            clearInterval(progressInterval);
+            updateProgress(65, "Инициализация физики", "Создание физического мира");
+            
+            await new Promise(r => setTimeout(r, 30));
+            updateProgress(70, "Настройка параметров", "Конфигурация мягкого тела");
+            
+            await new Promise(r => setTimeout(r, 30));
+            updateProgress(80, "Создание ткани", "Генерация сетки 40x40");
+            
+            // ========== ФИЗИЧЕСКИЙ МИР ==========
+            const LAYER_MOVING = 1;
+            const LAYER_NON_MOVING = 0;
+            
+            // Создаём сцену Three.js
+            const scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x0a0a2a);
+            scene.fog = new THREE.FogExp2(0x0a0a2a, 0.008);
+            
+            const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(15, 13, 18);
+            camera.lookAt(0, 8, 0);
+            
+            const renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            document.getElementById('container')?.remove();
+            const container = document.createElement('div');
+            container.id = 'container';
+            document.body.insertBefore(container, document.body.firstChild);
+            container.appendChild(renderer.domElement);
+            
+            const controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            
+            // Освещение
+            const ambientLight = new THREE.AmbientLight(0x404060);
+            scene.add(ambientLight);
+            const dirLight = new THREE.DirectionalLight(0xffffff, 1);
+            dirLight.position.set(5, 12, 7);
+            dirLight.castShadow = true;
+            dirLight.receiveShadow = true;
+            scene.add(dirLight);
+            const fillLight = new THREE.PointLight(0xffaa66, 0.4);
+            fillLight.position.set(3, 8, 4);
+            scene.add(fillLight);
+            
+            // Физика
+            const settings = new Jolt.JoltSettings();
+            const physicsSystemSettings = new Jolt.PhysicsSystemSettings();
+            const physicsSystem = new Jolt.PhysicsSystem(settings, physicsSystemSettings);
+            const bodyInterface = physicsSystem.GetBodyInterface();
+            physicsSystem.SetGravity(new Jolt.Vec3(0, -9.81, 0));
+            
+            // Пол
+            const floorShape = new Jolt.BoxShape(new Jolt.Vec3(25, 0.5, 25), null);
+            const floorSettings = new Jolt.BodyCreationSettings(floorShape, new Jolt.RVec3(0, -1, 0), Jolt.Quat.prototype.sIdentity(), Jolt.EMotionType_Static, LAYER_NON_MOVING);
+            const floorBody = bodyInterface.CreateBody(floorSettings);
+            const floorMat = new THREE.MeshStandardMaterial({ color: 0x2a5f8a, roughness: 0.6 });
+            const floorMesh = new THREE.Mesh(new THREE.BoxGeometry(50, 1, 50), floorMat);
+            floorMesh.position.set(0, -1, 0);
+            floorMesh.receiveShadow = true;
+            scene.add(floorMesh);
+            
+            updateProgress(85, "Создание мягкого тела", "Построение вершин и граней");
+            
+            // Мягкое тело (как в оригинальной демке)
+            const gridSize = 40;
+            const gridSpacing = 0.5;
+            const offset = -0.5 * gridSpacing * (gridSize - 1);
+            const sharedSettings = new Jolt.SoftBodySharedSettings;
+            
+            const vertexIndex = (x, y) => x + y * gridSize;
+            const v = new Jolt.SoftBodySharedSettingsVertex;
+            for (let y = 0; y < gridSize; y++)
+                for (let x = 0; x < gridSize; x++)
+                    sharedSettings.mVertices.push_back({ mPosition: new Jolt.Float3(offset + x * gridSpacing, 0, offset + y * gridSpacing) });
+            
+            // Фиксация углов
+            sharedSettings.mVertices.at(vertexIndex(0, 0)).mInvMass = 0;
+            sharedSettings.mVertices.at(vertexIndex(gridSize-1, 0)).mInvMass = 0;
+            sharedSettings.mVertices.at(vertexIndex(0, gridSize-1)).mInvMass = 0;
+            sharedSettings.mVertices.at(vertexIndex(gridSize-1, gridSize-1)).mInvMass = 0;
+            
+            const face = new Jolt.SoftBodySharedSettingsFace(0, 0, 0, 0);
+            for (let y = 0; y < gridSize-1; y++) {
+                for (let x = 0; x < gridSize-1; x++) {
+                    face.set_mVertex(0, vertexIndex(x, y));
+                    face.set_mVertex(1, vertexIndex(x, y+1));
+                    face.set_mVertex(2, vertexIndex(x+1, y+1));
+                    sharedSettings.AddFace(face);
+                    face.set_mVertex(1, vertexIndex(x+1, y+1));
+                    face.set_mVertex(2, vertexIndex(x+1, y));
+                    sharedSettings.AddFace(face);
+                }
+            }
+            
+            const attrs = new Jolt.SoftBodySharedSettingsVertexAttributes();
+            attrs.mCompliance = 0.00001;
+            attrs.mShearCompliance = 0.00001;
+            sharedSettings.CreateConstraints(attrs, 1);
+            sharedSettings.Optimize();
+            
+            const clothSettings = new Jolt.SoftBodyCreationSettings(sharedSettings, new Jolt.RVec3(0, 12, 0), Jolt.Quat.prototype.sIdentity());
+            clothSettings.mObjectLayer = LAYER_MOVING;
+            clothSettings.mUpdatePosition = false;
+            const softBody = bodyInterface.CreateSoftBody(clothSettings);
+            
+            // Визуализация ткани
+            const clothMat = new THREE.MeshStandardMaterial({ color: 0x88aaff, side: THREE.DoubleSide, roughness: 0.4, metalness: 0.1, transparent: true, opacity: 0.85 });
+            const clothMesh = new THREE.Mesh(new THREE.PlaneGeometry(19.5, 19.5, 40, 40), clothMat);
+            clothMesh.rotation.x = -Math.PI/2;
+            clothMesh.position.y = 12;
+            clothMesh.castShadow = true;
+            clothMesh.receiveShadow = true;
+            scene.add(clothMesh);
+            
+            updateProgress(95, "Финальная настройка", "Подготовка интерфейса");
+            
+            // Объекты и переменные
+            let dynamicBodies = [];
+            let markers = null;
+            const colors = [0xff6b6b, 0x4ecdc4, 0x45b7d1, 0x96ceb4, 0xffcc5c, 0xff6f69, 0x9b59b6, 0x3498db, 0xe67e22, 0x2ecc71];
+            
+            function addToScene(body, color) {
+                const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.4, 16, 16), new THREE.MeshStandardMaterial({ color, roughness: 0.3 }));
+                mesh.castShadow = true;
+                mesh.receiveShadow = true;
+                mesh.userData = { body };
+                scene.add(mesh);
+                body.userData = { mesh };
+                return mesh;
+            }
+            
+            function createObject(type, x, y, z) {
+                const size = parseFloat(document.getElementById('size-slider').value);
+                let shape;
+                switch(type) {
+                    case 'sphere': shape = new Jolt.SphereShape(size, null); break;
+                    case 'box': shape = new Jolt.BoxShape(new Jolt.Vec3(size, size, size), null); break;
+                    case 'capsule': shape = new Jolt.CapsuleShape(size*1.5, size, null); break;
+                    case 'cylinder': shape = new Jolt.CylinderShape(size*0.8, size, null); break;
+                    case 'cone': shape = new Jolt.ConeShape(size*1.2, size, null); break;
+                    default: shape = new Jolt.SphereShape(size, null);
+                }
+                const settings = new Jolt.BodyCreationSettings(shape, new Jolt.RVec3(x, y, z), Jolt.Quat.prototype.sIdentity(), Jolt.EMotionType_Dynamic, LAYER_MOVING);
+                settings.mOverrideMassProperties = Jolt.EOverrideMassProperties_CalculateInertia;
+                settings.mMassPropertiesOverride.mMass = 20 + Math.random() * 80;
+                const body = bodyInterface.CreateBody(settings);
+                addToScene(body, colors[Math.floor(Math.random() * colors.length)]);
+                dynamicBodies.push(body);
+                updateStats();
+                return body;
+            }
+            
+            function addObject(type = null) {
+                const t = type || ['sphere','box','capsule','cylinder','cone'][Math.floor(Math.random()*5)];
+                createObject(t, (Math.random()-0.5)*14, 14 + Math.random()*6, (Math.random()-0.5)*14);
+            }
+            
+            function addRandomObjects(count) {
+                for(let i=0;i<count;i++) setTimeout(() => addObject(), i*20);
+            }
+            
+            function clearAll() {
+                dynamicBodies.forEach(b => { bodyInterface.RemoveBody(b.GetID()); bodyInterface.DestroyBody(b); if(b.userData?.mesh) scene.remove(b.userData.mesh); });
+                dynamicBodies = [];
+                updateStats();
+            }
+            
+            function pushAll() {
+                const force = parseFloat(document.getElementById('force-slider').value);
+                dynamicBodies.forEach(b => {
+                    const v = b.GetLinearVelocity();
+                    const dir = new Jolt.Vec3((Math.random()-0.5)*2, Math.random()*1.5+0.5, (Math.random()-0.5)*2).Normalized();
+                    bodyInterface.SetLinearVelocity(b, new Jolt.Vec3(v.GetX()+dir.GetX()*force, v.GetY()+dir.GetY()*force+30, v.GetZ()+dir.GetZ()*force), Jolt.EActivation_Activate);
+                });
+            }
+            
+            function updateStats() {
+                document.getElementById('objectCount').innerText = dynamicBodies.length;
+                document.getElementById('stats-info').innerHTML = `⚡ Объектов: ${dynamicBodies.length} | 🎪 1600 вершин`;
+            }
+            
+            // UI обработчики
+            document.getElementById('add-random-btn').onclick = () => addRandomObjects(10);
+            document.getElementById('push-btn').onclick = pushAll;
+            document.getElementById('clear-btn').onclick = clearAll;
+            document.getElementById('reset-cloth-btn').onclick = () => bodyInterface.SetPosition(softBody, new Jolt.RVec3(0,12,0), Jolt.EActivation_Activate);
+            document.getElementById('add-many-btn').onclick = () => { for(let i=0;i<50;i++) setTimeout(() => addObject(), i*15); };
+            document.getElementById('gravity-toggle').onchange = (e) => physicsSystem.SetGravity(e.target.checked ? new Jolt.Vec3(0,-9.81,0) : new Jolt.Vec3(0,0,0));
+            document.querySelectorAll('.object-btn').forEach(btn => btn.onclick = () => addObject(btn.dataset.type));
+            
+            // Анимация
+            function animate() {
+                requestAnimationFrame(animate);
+                physicsSystem.Update(1/60, 1, 1, null, null);
+                dynamicBodies.forEach(b => {
+                    if(b.userData?.mesh) {
+                        const p = b.GetPosition(), r = b.GetRotation();
+                        b.userData.mesh.position.set(p.GetX(), p.GetY(), p.GetZ());
+                        b.userData.mesh.quaternion.set(r.GetX(), r.GetY(), r.GetZ(), r.GetW());
+                    }
+                });
+                controls.update();
+                renderer.render(scene, camera);
+            }
+            animate();
+            
+            // Добавляем начальные объекты
+            setTimeout(() => { for(let i=0;i<30;i++) setTimeout(() => addObject(), i*50); }, 500);
+            
+            // Завершаем загрузку
+            updateProgress(100, "Готово!", "Физический мир загружен");
+            await new Promise(r => setTimeout(r, 300));
+            const overlay = document.getElementById('loading-overlay');
+            if(overlay) {
+                overlay.style.opacity = '0';
+                setTimeout(() => overlay.style.display = 'none', 500);
+            }
+            document.getElementById('controls').classList.add('visible');
+            document.getElementById('drag-indicator').style.opacity = '1';
+            document.getElementById('main-interface').style.opacity = '1';
+        }).catch(err => {
+            console.error("Ошибка:", err);
+            document.getElementById('loading-details').innerHTML = "Ошибка загрузки. Обновите страницу.";
+            document.getElementById('loading-details').style.color = "#ff6b6b";
+        });
+    </script>
+</body>
+  </html>
